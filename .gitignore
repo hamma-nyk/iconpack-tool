@@ -9,7 +9,10 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+tmp_addbg
+tmp_resize
+tmp_overlay
+tmp_crot
 # testing
 /coverage
 
