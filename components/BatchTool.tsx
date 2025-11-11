@@ -18,7 +18,7 @@ export default function BatchTool() {
   const [isDragging, setIsDragging] = useState(false);
   const [status, setStatus] = useState("");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
 
   // === Generate preview (maks 6) ===
   useEffect(() => {
@@ -246,7 +246,9 @@ export default function BatchTool() {
               return src ? (
                 <canvas
                   key={i}
-                  ref={(el) => (canvasRefs.current[i] = el)}
+                  ref={(el) => {
+                    canvasRefs.current[i] = el;
+                  }}
                   className="rounded-xl bg-neutral-800 shadow-md"
                   style={{ width: 128, height: 128 }}
                 />

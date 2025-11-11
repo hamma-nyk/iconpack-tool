@@ -11,7 +11,7 @@ export default function OverlayTool() {
   const [isDragging, setIsDragging] = useState(false);
   const [status, setStatus] = useState("");
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
 
   // === Generate preview (maks 24) ===
   useEffect(() => {
@@ -119,7 +119,9 @@ export default function OverlayTool() {
               return (
                 <canvas
                   key={idx}
-                  ref={(el) => (canvasRefs.current[revIndex] = el)}
+                  ref={(el) => {
+                    canvasRefs.current[revIndex] = el;
+                  }}
                   className="rounded-2xl backdrop-blur-sm"
                   style={{ width: 70, height: 70 }}
                 />

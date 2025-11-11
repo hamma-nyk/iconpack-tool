@@ -5,11 +5,12 @@ import OverlayTool from "@/components/OverlayTool";
 import ResizeTool from "@/components/ResizeTool";
 import AddBgTool from "@/components/AddBgTool";
 import BatchTool from "@/components/BatchTool";
+import NinePatch from "@/components/NinePatch";
 
 export default function HomePage() {
-  const [mode, setMode] = useState<"overlay" | "addbg" | "batch" | "resize">(
-    "addbg"
-  );
+  const [mode, setMode] = useState<
+    "overlay" | "addbg" | "batch" | "nine" | "resize"
+  >("addbg");
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-neutral-950 text-white p-8">
@@ -62,6 +63,16 @@ export default function HomePage() {
         >
           📦 Batch Tool
         </button>
+        <button
+          onClick={() => setMode("nine")}
+          className={`px-6 py-2 rounded-lg font-semibold transition ${
+            mode === "nine"
+              ? "bg-blue-600"
+              : "bg-neutral-800 hover:bg-neutral-700"
+          }`}
+        >
+          📦 Nine Patch
+        </button>
       </div>
 
       {/* View Mode */}
@@ -70,6 +81,7 @@ export default function HomePage() {
         {mode === "overlay" && <OverlayTool />}
         {mode === "resize" && <ResizeTool />}
         {mode === "batch" && <BatchTool />}
+        {mode === "nine" && <NinePatch />}
       </div>
     </div>
   );
