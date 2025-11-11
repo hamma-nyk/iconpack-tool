@@ -32,6 +32,7 @@ export default function NinePatchEditorAdvanced() {
   // image and natural size
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [natural, setNatural] = useState({ w: 0, h: 0 });
+  const [originalBuffer, setOriginalBuffer] = useState<Buffer | null>(null); // <-- TAMBAHKAN INI
 
   // guides in image coordinates (px)
   const [hStretch, setHStretch] = useState<Guide | null>(null); // top stretch (x coords)
@@ -61,7 +62,27 @@ export default function NinePatchEditorAdvanced() {
 
   // load image from file
   const handleFile = (file?: File) => {
-    if (!file) return;
+    if (!file) {
+      // Bersihkan state jika tidak ada file yang dipilih
+      setImageUrl(null);
+      setOriginalBuffer(null);
+      setNatural({ w: 0, h: 0 });
+      setHStretch(null);
+      setVStretch(null);
+      setPadH(null);
+      setPadV(null);
+      return;
+    }
+
+    // 1. Baca dan simpan buffer file asli
+    const reader = new FileReader();
+    reader.onload = () => {
+      const arrayBuffer = reader.result as ArrayBuffer;
+      setOriginalBuffer(Buffer.from(arrayBuffer)); // <-- Simpan buffer
+    };
+    reader.readAsArrayBuffer(file);
+
+    // 2. Lanjutkan logika yang ada untuk menampilkan gambar
     const url = URL.createObjectURL(file);
     setImageUrl(url);
   };
@@ -531,127 +552,24 @@ export default function NinePatchEditorAdvanced() {
     const e = Math.max(s + 1, Math.min(end, natural.h));
     setPadV({ start: s, end: e });
   };
-  const exportNineCompiled = async () => {
-    if (!imgRef.current || !hStretch || !vStretch || !padH || !padV) {
-      alert("Image or guides missing");
-      return;
-    }
 
-    const img = imgRef.current;
-    const iw = natural.w;
-    const ih = natural.h;
-
-    // Gambar image asli ke canvas (tanpa border)
-    const c = document.createElement("canvas");
-    c.width = iw;
-    c.height = ih;
-    const ctx = c.getContext("2d")!;
-    ctx.clearRect(0, 0, iw, ih);
-    ctx.drawImage(img, 0, 0, iw, ih);
-
-    // Convert canvas ke PNG Buffer
-    const blob = await new Promise<Blob | null>((resolve) =>
-      c.toBlob((b) => resolve(b), "image/png")
-    );
-    if (!blob) return;
-
-    const buf = Buffer.from(await blob.arrayBuffer());
-
-    // Ekstrak chunk PNG
-    const chunks: PNGChunk[] = extract(buf);
-
-    // Buat chunk npTc
-    const npTcChunk = createNinePatchChunk({
-      stretch: {
-        left: hStretch.start,
-        right: iw - hStretch.end,
-        top: vStretch.start,
-        bottom: ih - vStretch.end,
-      },
-      padding: {
-        left: padH.start,
-        right: iw - padH.end,
-        top: padV.start,
-        bottom: ih - padV.end,
-      },
-    });
-
-    const newPng = encode([
-      ...chunks.filter((c: PNGChunk) => c.name !== "IEND"),
-      npTcChunk,
-      chunks.find((c: PNGChunk) => c.name === "IEND")!,
-    ]);
-    // Masukkan sebelum IEND
-
-    // Simpan hasilnya
-    const blobOut = new Blob([new Uint8Array(newPng).buffer], {
-      type: "image/png",
-    });
-    const a = document.createElement("a");
-    const url = URL.createObjectURL(blobOut);
-
-    let name = "image";
-    try {
-      name = (imageUrl || "").split("/").pop() || "image";
-    } catch {}
-    if (!name.endsWith(".9.png")) name = name.replace(/\.\w+$/, "") + ".9.png";
-
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  // === Helper untuk membuat chunk npTc ===
-  function createNinePatchChunk({
-    stretch,
-    padding,
-  }: {
-    stretch: { left: number; right: number; top: number; bottom: number };
-    padding: { left: number; right: number; top: number; bottom: number };
-  }) {
-    // Struktur biner chunk npTc Android
-    const buf = Buffer.alloc(68);
-    let offset = 0;
-
-    const iw = natural.w;
-    const ih = natural.h;
-
-    // Header
-    buf.writeInt32BE(1, offset); // wasDeserialized
-    offset += 4;
-    buf.writeInt32BE(2, offset); // xDiv count
-    offset += 4;
-    buf.writeInt32BE(2, offset); // yDiv count
-    offset += 4;
-    buf.writeInt32BE(9, offset); // color count
-    offset += 4;
-
-    // Padding area
-    buf.writeInt32BE(padding.left, offset);
-    buf.writeInt32BE(padding.right, offset + 4);
-    buf.writeInt32BE(padding.top, offset + 8);
-    buf.writeInt32BE(padding.bottom, offset + 12);
-    offset += 16;
-
-    // Stretch area
-    buf.writeInt32BE(stretch.left, offset);
-    buf.writeInt32BE(iw - stretch.right, offset + 4);
-    buf.writeInt32BE(stretch.top, offset + 8);
-    buf.writeInt32BE(ih - stretch.bottom, offset + 12);
-    offset += 16;
-
-    // Warna placeholder (9 segmen)
-    buf.writeInt32BE(1, offset);
-    buf.writeInt32BE(1, offset + 4);
-    buf.writeInt32BE(1, offset + 8);
-    buf.writeInt32BE(1, offset + 12);
-
-    return { name: "npTc", data: buf };
-  }
   // export .9.png
+  // when numeric inputs change, update guides and redraw
+  useEffect(() => {
+    drawAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hStretch,
+    vStretch,
+    padH,
+    padV,
+    zoom,
+    showPatch,
+    showContent,
+    scaleX,
+    scaleY,
+  ]);
+
   const exportNine = () => {
     if (!imgRef.current || !hStretch || !vStretch || !padH || !padV) {
       alert("Image or guides missing");
@@ -712,22 +630,206 @@ export default function NinePatchEditorAdvanced() {
     }, "image/png");
   };
 
-  // when numeric inputs change, update guides and redraw
-  useEffect(() => {
-    drawAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
+  const exportNineCompiled = async ({
+    imageUrl,
     hStretch,
     vStretch,
     padH,
     padV,
-    zoom,
-    showPatch,
-    showContent,
-    scaleX,
-    scaleY,
-  ]);
+  }: {
+    imageUrl?: string | null; // <-- Tipe diubah sedikit
+    hStretch: Guide | null;
+    vStretch: Guide | null;
+    padH: Guide | null;
+    padV: Guide | null;
+  }) => {
+    // --- PERUBAHAN UTAMA: Gunakan originalBuffer ---
+    if (
+      !originalBuffer ||
+      !hStretch ||
+      !vStretch ||
+      !padH ||
+      !padV ||
+      !natural.w
+    ) {
+      alert("Image buffer or guides missing. Please upload an image first.");
+      return;
+    }
 
+    const iw = natural.w;
+    const ih = natural.h;
+    const buf = originalBuffer; // <-- Gunakan buffer dari state
+
+    // --- Bagian canvas.toBlob() DIHAPUS ---
+
+    // Ekstrak semua chunk PNG
+    let chunks: PNGChunk[];
+    try {
+      chunks = extract(buf);
+    } catch (e) {
+      alert("Error parsing PNG. Is this a valid PNG file?");
+      console.error(e);
+      return;
+    }
+
+    // Gabungkan semua IDAT menjadi satu
+    const idatChunks = chunks.filter((c) => c.name === "IDAT");
+    if (!idatChunks.length) {
+      alert("Could not find image data (IDAT) in PNG.");
+      return;
+    }
+    const totalIdatLength = idatChunks.reduce(
+      (sum, c) => sum + c.data.length,
+      0
+    );
+    const combinedIdat = new Uint8Array(totalIdatLength);
+    let offset = 0;
+    for (const c of idatChunks) {
+      combinedIdat.set(c.data, offset);
+      offset += c.data.length;
+    }
+
+    // Buat npTc chunk 84 bytes (menggunakan fungsi Anda yang sudah diperbaiki)
+    const npTcChunk = createNinePatchChunk({
+      iw,
+      ih,
+      hStretch,
+      vStretch,
+      padH,
+      padV,
+    });
+
+    // Susun ulang chunk:
+    // Hapus IDAT, IEND, dan npTc LAMA (jika ada)
+    const otherChunks = chunks.filter(
+      (c) => c.name !== "IDAT" && c.name !== "IEND" && c.name !== "npTc"
+    );
+    const iendChunk = chunks.find((c) => c.name === "IEND");
+
+    if (!iendChunk) {
+      alert("PNG file is corrupted (missing IEND chunk).");
+      return;
+    }
+
+    const newChunks = [
+      ...otherChunks, // Semua chunk asli (IHDR, gAMA, dll.)
+      npTcChunk, // npTc baru kita
+      { name: "IDAT", data: combinedIdat }, // Data gambar
+      iendChunk, // Penutup file
+    ];
+
+    // Encode PNG baru
+    const newPngBuffer = encode(newChunks);
+
+    // Simpan hasil
+    const blobOut = new Blob([new Uint8Array(newPngBuffer)], {
+      type: "image/png",
+    });
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(blobOut);
+
+    let name = "image";
+    try {
+      name = (imageUrl || "").split("/").pop() || "image";
+    } catch {}
+    if (!name.endsWith(".9.png")) name = name.replace(/\.\w+$/, "") + ".9.png";
+
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // === Helper: bikin chunk npTc sesuai format Android ===
+  function createNinePatchChunk({
+    iw,
+    ih,
+    hStretch,
+    vStretch,
+    padH,
+    padV,
+  }: {
+    iw: number;
+    ih: number;
+    hStretch: Guide;
+    vStretch: Guide;
+    padH: Guide;
+    padV: Guide;
+  }): PNGChunk {
+    const numXDivs = 2;
+    const numYDivs = 2;
+    const numColors = 9;
+    const totalBytes = 84;
+
+    const buf = new ArrayBuffer(totalBytes);
+    const dv = new DataView(buf);
+    let off = 0;
+
+    // --- Header (32 bytes) ---
+
+    // Bytes 0-3: Meta (no endianness)
+    dv.setUint8(off++, 1); // wasDeserialized
+    dv.setUint8(off++, numXDivs);
+    dv.setUint8(off++, numYDivs);
+    dv.setUint8(off++, numColors);
+
+    // Bytes 4-11: Offsets (LITTLE ENDIAN)
+    const xDivsOffset = 32;
+    const yDivsOffset = 40; // 32 + (2 * 4)
+    const colorsOffset = 48; // 40 + (2 * 4)
+
+    dv.setInt32(off, xDivsOffset, true); // true = little endian
+    off += 4;
+    dv.setInt32(off, yDivsOffset, true); // true = little endian
+    off += 4;
+    // off = 12
+
+    // Bytes 12-27: Padding (BIG ENDIAN)
+    // Perhitungan inset Anda (iw - padH.end) sudah BENAR.
+    // Kesalahannya adalah kita menuliskannya sebagai little-endian.
+    dv.setInt32(off, padH.start, false); // false = big endian
+    off += 4;
+    dv.setInt32(off, iw - padH.end, false); // false = big endian
+    off += 4;
+    dv.setInt32(off, padV.start, false); // false = big endian
+    off += 4;
+    dv.setInt32(off, ih - padV.end, false); // false = big endian
+    off += 4;
+    // off = 28
+
+    // Bytes 28-31: Color Offset (LITTLE ENDIAN)
+    dv.setInt32(off, colorsOffset, true); // true = little endian
+    off += 4;
+    // off = 32 (Header complete)
+
+    // --- Data Arrays (BIG ENDIAN) ---
+
+    // X divs (8 bytes, BIG ENDIAN)
+    dv.setInt32(off, hStretch.start, false); // false = big endian
+    off += 4;
+    dv.setInt32(off, hStretch.end, false); // false = big endian
+    off += 4;
+    // off = 40
+
+    // Y divs (8 bytes, BIG ENDIAN)
+    dv.setInt32(off, vStretch.start, false); // false = big endian
+    off += 4;
+    dv.setInt32(off, vStretch.end, false); // false = big endian
+    off += 4;
+    // off = 48
+
+    // Colors (36 bytes, BIG ENDIAN)
+    // 1 = NO_COLOR (nilai aman)
+    for (let i = 0; i < numColors; i++) {
+      dv.setInt32(off, 1, false); // false = big endian
+      off += 4;
+    }
+    // off = 84 (Chunk complete)
+
+    return { name: "npTc", data: new Uint8Array(buf) };
+  }
   return (
     <div className="max-w-6xl mx-auto p-6 text-sm text-gray-100">
       <h2 className="text-xl font-semibold mb-4 text-white">
@@ -758,10 +860,17 @@ export default function NinePatchEditorAdvanced() {
               Export .9.png
             </button>
             <button
-              onClick={exportNineCompiled}
-              className="px-3 py-1 bg-emerald-600 rounded"
+              onClick={() =>
+                exportNineCompiled({
+                  imageUrl,
+                  hStretch,
+                  vStretch,
+                  padH,
+                  padV,
+                })
+              }
             >
-              Export Compiled .9.png
+              Export .9.png
             </button>
           </div>
 
