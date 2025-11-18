@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     return new Response(zipBuffer, {
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": 'attachment; filename="resize_results.zip"',
+        // "Content-Disposition": 'attachment; filename="resize_results.zip"',
       },
     });
   } catch (err: any) {
